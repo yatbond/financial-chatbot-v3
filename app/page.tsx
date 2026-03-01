@@ -6,9 +6,10 @@ import { UserButton, useUser, SignedIn, SignedOut, SignInButton } from "@clerk/n
 
 // Format number for summary panel - abbreviate large numbers
 // IMPORTANT: Data values are in thousands ('000), so:
-// - A value of 70.5 means 70,500 (thousands) = 70.5 million
-// - We display values >= 1 as "Mil" (not "K")
-// - NO multiplication needed - just change the label
+// - A value of 70549.9 means 70,549,900 actual dollars = 70.5 million
+// - We MUST divide by 1000 to convert from thousands to millions
+// - NEVER multiply values anywhere in the chain
+// - formatSummaryNumber receives values in THOUSANDS and converts to display format
 function formatSummaryNumber(value: number | string): string {
   // If it's a percentage string, format with one decimal place
   if (typeof value === 'string' && value.includes('%')) {
@@ -25,15 +26,23 @@ function formatSummaryNumber(value: number | string): string {
   const absValue = Math.abs(value)
   const sign = value < 0 ? '-' : ''
   
-  // Data is in thousands ('000), so:
-  // - Values >= 1000000 (representing 1 billion+) → display as "B"
-  // - Values >= 1 (representing 1 million+) → display as "Mil"
-  // - Values < 1 (representing less than 1 million) → display as "K"
+  // Data is in thousands ('000), so we need to convert to display format:
+  // - Divide by 1000 to convert from thousands to millions
+  // - Values >= 1000000 (representing 1 trillion+ actual) → display as "T"
+  // - Values >= 1000 (representing 1 billion+ actual) → display as "B"
+  // - Values >= 1 (representing 1 million+ actual) → display as "Mil"
+  // - Values < 1 (representing less than 1 million actual) → display as "K"
   if (absValue >= 1e6) {
-    return `${sign}${(absValue / 1e6).toFixed(1)} B`
+    // 1,000,000 thousand = 1 trillion actual = 1000 billion display
+    return `${sign}${(absValue / 1e6).toFixed(1)} T`
+  } else if (absValue >= 1000) {
+    // 1,000 thousand = 1 billion actual = 1 B display
+    return `${sign}${(absValue / 1000).toFixed(1)} B`
   } else if (absValue >= 1) {
+    // 1 thousand = 1 million actual = 1 Mil display
     return `${sign}${absValue.toFixed(1)} Mil`
   }
+  // Less than 1 thousand = less than 1 million actual
   return `${sign}${absValue.toFixed(2)} K`
 }
 
