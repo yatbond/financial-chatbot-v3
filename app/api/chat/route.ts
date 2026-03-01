@@ -165,16 +165,19 @@ const STOPWORDS = new Set([
 
 // Primary keywords for Financial Type matching (10x weight)
 // These are the KEY differentiators between Financial Types
+// Maps canonical Financial_Type names to their user-facing keyword variants
+// IMPORTANT: "budget" / "bp" → "business plan" (NOT "1st working budget")
 const FINANCIAL_TYPE_KEYWORDS: Record<string, string[]> = {
-  'projection': ['projection', 'projected'],
-  'revision': ['revision', 'rev'],
-  'business plan': ['business plan', 'budget', 'bp'],
-  'wip': ['wip', 'audit'],
-  'committed': ['committed'],
   'cash flow': ['cash flow', 'cashflow', 'cf'],
-  'tender': ['tender'],
+  'committed cost': ['committed', 'committed cost', 'committed value'],
+  'projection': ['projection', 'projected'],
   'accrual': ['accrual', 'accrued'],
-  '1st working budget': ['1st working budget', 'first working', 'working budget'],
+  'business plan': ['business plan', 'budget', 'bp'],
+  'tender': ['tender', 'budget tender'],
+  'actual': ['actual', 'actual cost'],
+  'audit report': ['wip', 'audit', 'audit report'],
+  '1st working budget': ['1st working budget', 'first working budget', 'first working', 'working budget'],
+  'revision as at': ['revision', 'rev', 'budget revision', 'revision as at'],
 }
 
 // Check if a word is a primary Financial Type keyword
@@ -1156,22 +1159,6 @@ const PARENT_ITEM_MAP: Record<string, { code: string; name: string }> = {
   'others': { code: '2.10', name: 'Others' },
   'other': { code: '2.10', name: 'Others' },
   'contingency': { code: '2.11', name: 'Contingency' },
-}
-
-// Financial type keyword → canonical Financial_Type name mapping
-// These map user-facing keywords to the sheet names / Financial_Type values in the data
-// IMPORTANT: "budget" / "bp" → "business plan" (NOT "1st working budget")
-const FINANCIAL_TYPE_KEYWORDS: Record<string, string[]> = {
-  'cash flow': ['cash flow', 'cashflow', 'cf'],
-  'committed cost': ['committed', 'committed cost', 'committed value'],
-  'projection': ['projection', 'projected'],
-  'accrual': ['accrual', 'accrued'],
-  'business plan': ['business plan', 'budget', 'bp'],
-  'tender': ['tender', 'budget tender'],
-  'actual': ['actual', 'actual cost'],
-  'audit report': ['wip', 'audit', 'audit report'],
-  '1st working budget': ['1st working budget', 'first working budget'],
-  'revision as at': ['revision', 'rev', 'budget revision', 'revision as at'],
 }
 
 // Detect if a query starts with "Total" keyword
