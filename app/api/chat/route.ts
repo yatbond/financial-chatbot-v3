@@ -1491,6 +1491,15 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
 
 // Parent item name → item code mapping
 const PARENT_ITEM_MAP: Record<string, { code: string; name: string }> = {
+  // Summary-level items (GP, NP) — important for disambiguation
+  // Item 3 = "Gross Profit (Item 1.0-2.0)" vs Item 5 = "Gross Profit (Item 3.0-4.3)"
+  // When user says "GP" they mean Item 3 (the primary Gross Profit)
+  'gross profit': { code: '3', name: 'Gross Profit (Item 1.0-2.0) (Financial A/C)' },
+  'net profit': { code: '7', name: 'Acc. Net Profit/(Loss)' },
+  'income': { code: '1', name: 'Income' },
+  'revenue': { code: '1', name: 'Income' },
+  'overhead': { code: '6', name: 'Overhead' },
+  // Cost sub-categories
   'preliminaries': { code: '2.1', name: 'Preliminaries' },
   'prelim': { code: '2.1', name: 'Preliminaries' },
   'preliminary': { code: '2.1', name: 'Preliminaries' },
