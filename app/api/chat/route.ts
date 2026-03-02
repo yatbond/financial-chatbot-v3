@@ -2852,9 +2852,12 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
         if (!matchedKeywords.includes(qWord)) matchedKeywords.push(qWord)
       }
 
-      // Item_Code match
-      if (d.Item_Code.toLowerCase().includes(qWord)) {
-        matchScore += 3
+      // Item_Code match - EXACT match gets much higher score than substring
+      if (d.Item_Code.toLowerCase() === qWord) {
+        matchScore += 50  // EXACT match - high priority (e.g., "2.1" matches "2.1")
+        if (!matchedKeywords.includes(qWord)) matchedKeywords.push(qWord)
+      } else if (d.Item_Code.toLowerCase().includes(qWord)) {
+        matchScore += 3   // Substring match - low priority (e.g., "2.1" matches "2.1.1")
         if (!matchedKeywords.includes(qWord)) matchedKeywords.push(qWord)
       }
 
