@@ -81,15 +81,19 @@ import { google } from 'googleapis'
  *   1st working budget, first working   → "1st Working Budget"
  *
  * DATA TYPE / ITEM SHORTCUTS (ACRONYM_MAP below):
- *   gp                → Gross Profit
- *   np                → Net Profit
- *   prelim            → Preliminaries
- *   subcon, sub       → Subcontractor
- *   rebar             → Reinforcement
+ *   gp                → Gross Profit (Item 3)
+ *   np, net profit    → Net Profit (Item 7)
+ *   cost, total cost  → Less : Cost (Item 2)
+ *   prelim, preliminary, preliminaries → Preliminaries (Item 2.1)
+ *   material, materials, material cost → Materials (Item 2.2)
+ *   plant, machinery, all plant        → Plant & Machinery (Item 2.3)
+ *   subcon, sub, subbie, subcontractors → Subcontractor (Item 2.4)
+ *   contract works, subbie/subcon contract works → Contract works (Item 2.4.1)
+ *   vo, variation, subbie/subcon vo/variation → Variation (Item 2.4.2)
+ *   claim, claims, subbie/subcon claim → Claim (Item 2.4.3)
+ *   rebar             → Reinforcement (Item 2.6)
  *   staff             → Manpower (Mgt. & Supervision)
  *   labour, labor     → Manpower (Labour)
- *   material          → Materials
- *   plant, machinery  → Plant and Machinery
  *   profit, income    → Gross Profit
  *   loss              → Net Loss
  *
@@ -103,6 +107,7 @@ const ACRONYM_MAP: Record<string, string> = {
   // === Data Type shortcuts ===
   'gp': 'gross profit',
   'np': 'net profit',
+  'net profit': 'net profit',
 
   // === Financial Type shortcuts ===
   'bp': 'business plan',
@@ -119,19 +124,60 @@ const ACRONYM_MAP: Record<string, string> = {
   'cashflow': 'cash flow',
   'cash': 'cash flow',
 
-  // === Item / category shortcuts ===
+  // === Item / category shortcuts (Item_Code 2.1 - Preliminaries) ===
+  'prelim': 'preliminaries',
+  'preliminary': 'preliminaries',
+  'preliminaries': 'preliminaries',
+
+  // === Item / category shortcuts (Item_Code 2 - Less : Cost) ===
+  'cost': 'less cost',
+  'total cost': 'less cost',
+
+  // === Item / category shortcuts (Item_Code 2.2 - Materials) ===
+  'material': 'materials',
+  'materials': 'materials',
+  'material cost': 'materials',
+
+  // === Item / category shortcuts (Item_Code 2.3 - Plant & Machinery) ===
+  'plant': 'plant and machinery',
+  'machinery': 'plant and machinery',
+  'all plant': 'plant and machinery',
+
+  // === Item / category shortcuts (Item_Code 2.4 - Subcontractor) ===
   'subcon': 'subcontractor',
   'sub': 'subcontractor',
   'subcontractor': 'subcontractor',
+  'subcontractors': 'subcontractor',
+  'subbie': 'subcontractor',
+
+  // === Item / category shortcuts (Item_Code 2.4.1 - Contract works) ===
+  'contract works': 'contract works',
+  'subbie contract works': 'contract works',
+  'subcon contract works': 'contract works',
+
+  // === Item / category shortcuts (Item_Code 2.4.2 - Variation) ===
+  'vo': 'variation',
+  'variations': 'variation',
+  'subbie vo': 'variation',
+  'subcon vo': 'variation',
+  'subbie variation': 'variation',
+  'subcon variation': 'variation',
+  'subbie variations': 'variation',
+  'subcon variations': 'variation',
+
+  // === Item / category shortcuts (Item_Code 2.4.3 - Claim) ===
+  'claim': 'claim',
+  'claims': 'claim',
+  'subbie claim': 'claim',
+  'subcon claim': 'claim',
+  'subbie claims': 'claim',
+  'subcon claims': 'claim',
+
+  // === Other shortcuts ===
   'rebar': 'reinforcement',
   'staff': 'manpower (mgt. & supervision)',
   'labour': 'manpower (labour)',
   'labor': 'manpower (labour)',
-  'prelim': 'preliminaries',
-  'preliminary': 'preliminaries',
-  'material': 'materials',
-  'plant': 'plant and machinery',
-  'machinery': 'plant and machinery',
   'lab': 'labour',
 
   // === Other synonyms ===
