@@ -435,7 +435,6 @@ export default function Home() {
                       { cmd: 'Analyze', desc: 'Run comprehensive financial analysis' },
                       { cmd: 'Detail X', desc: 'Drill down into section X (e.g. Detail 4)' },
                       { cmd: 'Detail X.Y', desc: 'Drill into sub-item (e.g. Detail 4.2)' },
-                      { cmd: 'Total [Item] [Type]', desc: 'Sum sub-items (e.g. Total 4 bp)' },
                       { cmd: 'Compare X with Y', desc: 'Compare financial types (e.g. Compare bp with wip)' },
                       { cmd: 'Trend [metric] [months]', desc: 'Show trends (e.g. Trend gp 6)' },
                     ].map(({ cmd, desc }) => (
