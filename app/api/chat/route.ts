@@ -2647,6 +2647,9 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
       for (const qWord of questionWords) {
         // Skip words that look like item codes (e.g., "2.1", "1.2.3")
         if (isItemCodePattern(qWord)) continue
+        // Skip words that are Financial_Type keywords (e.g., "projected", "budget")
+        // This prevents "projected" from matching "Project Code" in Data_Type
+        if (isFinancialTypeKeyword(qWord)) continue
         
         for (const dtWord of dtWords) {
           if (qWord === dtWord) {
@@ -2663,6 +2666,8 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
         if (qWord.length <= 3) continue
         // Skip words that look like item codes
         if (isItemCodePattern(qWord)) continue
+        // Skip words that are Financial_Type keywords
+        if (isFinancialTypeKeyword(qWord)) continue
 
         for (const dtWord of dtWords) {
           const qLen = qWord.length
@@ -2691,6 +2696,8 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
     for (const word of questionWords) {
       // Skip words that look like item codes (e.g., "2.1", "1.2.3")
       if (isItemCodePattern(word)) continue
+      // Skip words that are Financial_Type keywords
+      if (isFinancialTypeKeyword(word)) continue
       
       const match = findClosestMatch(word, dataTypes)
       if (match) {
