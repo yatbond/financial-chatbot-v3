@@ -2689,6 +2689,32 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
     }
   }
 
+  // Step 6: Extract Item_Code from question
+  // Patterns: "item code 2.1", "item_code 2.1", "item 2.1", standalone "2.1"
+  let targetItemCode: string | null = null
+  
+  // Pattern 1: "item code X.X" or "item_code X.X" or "item X.X"
+  const itemCodePattern = /item[_\s]*code[_\s]*(\d+(?:\.\d+)*)/i
+  const itemCodeMatch = expandedQuestion.match(itemCodePattern)
+  if (itemCodeMatch) {
+    targetItemCode = itemCodeMatch[1]
+  } else {
+    // Pattern 2: "item X.X" (without "code")
+    const itemPattern = /item[_\s]+(\d+(?:\.\d+)*)/i
+    const itemMatch = expandedQuestion.match(itemPattern)
+    if (itemMatch) {
+      targetItemCode = itemMatch[1]
+    } else {
+      // Pattern 3: Standalone number pattern like "2.1" or "1.2.3" (but not dates like "2025")
+      // Only match if it's clearly an item code (has a decimal point and is short)
+      const standalonePattern = /(?:^|\s)(\d+\.\d+(?:\.\d+)?)(?:\s|$)/
+      const standaloneMatch = expandedQuestion.match(standalonePattern)
+      if (standaloneMatch && standaloneMatch[1].length <= 10) {
+        targetItemCode = standaloneMatch[1]
+      }
+    }
+  }
+
   // Track which sheet was actually applied (for display)
   let appliedSheet = targetSheet
 
@@ -2721,6 +2747,11 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
     filtered = filtered.filter(d => d.Data_Type === targetDataType)
   }
 
+  // Apply Item_Code filter (if found)
+  if (targetItemCode) {
+    filtered = filtered.filter(d => d.Item_Code === targetItemCode)
+  }
+
   // If no exact matches, relax filters progressively
   if (filtered.length === 0) {
     // Try without Financial_Type
@@ -2729,6 +2760,7 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
     if (parsedDate.month) filtered = filtered.filter(d => d.Month === parsedDate.month)
     if (parsedDate.year) filtered = filtered.filter(d => d.Year === parsedDate.year)
     if (targetDataType) filtered = filtered.filter(d => d.Data_Type === targetDataType)
+    if (targetItemCode) filtered = filtered.filter(d => d.Item_Code === targetItemCode)
     appliedSheet = targetSheet || 'Financial Status'
   }
 
@@ -2738,6 +2770,7 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
     if (targetSheet) filtered = filtered.filter(d => d.Sheet_Name === targetSheet)
     if (parsedDate.month) filtered = filtered.filter(d => d.Month === parsedDate.month)
     if (parsedDate.year) filtered = filtered.filter(d => d.Year === parsedDate.year)
+    if (targetItemCode) filtered = filtered.filter(d => d.Item_Code === targetItemCode)
     appliedSheet = targetSheet || 'Financial Status'
   }
 
@@ -2796,7 +2829,7 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
   // Show year - only show actual year if user specified it
   response += `• Year: ${hasUserDate && parsedDate.year ? parsedDate.year : 'All'}\n`
   response += `• Data Type: ${targetDataType || 'All'}\n`
-  response += `• Item Code: all\n\n`
+  response += `• Item Code: ${targetItemCode || 'All'}\n\n`
 
   // Build source ref for the total
   const totalSourceRef = filtered.length === 1 
@@ -2806,9 +2839,11 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
       : ''
   response += `**Total: ${formatCurrency(total)}${totalSourceRef}** ('000)\n\n`
 
-  response += `**By Item Code:**\n`
-  itemGroups.forEach((rows, itemCode) => {
-    const itemTotal = rows.reduce((sum, d) => sum + toNumber(d.Value), 0)
+  // Only show "By Item Code" breakdown if no specific item code was filtered
+  if (!targetItemCode) {
+    response += `**By Item Code:**\n`
+    itemGroups.forEach((rows, itemCode) => {
+      const itemTotal = rows.reduce((sum, d) => sum + toNumber(d.Value), 0)
     const itemSourceRef = rows.length === 1 
       ? ` ${formatSourceRef(rows[0])}` 
       : rows.length > 1 
@@ -2816,6 +2851,7 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
         : ''
     response += `• Item ${itemCode}: ${formatCurrency(itemTotal)}${itemSourceRef}\n`
   })
+  } // End of if (!targetItemCode)
 
   // Create candidates for clickable selection
   // ALWAYS score ALL project data records and show top 10 best matches
