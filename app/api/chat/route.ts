@@ -195,6 +195,12 @@ function toNumber(val: number | string): number {
   return parseFloat(val) || 0
 }
 
+// Format a source reference for data traceability
+// Output: [Sheet_Name, Financial_Type, Data_Type, Item_Code, Month, Year]
+function formatSourceRef(row: FinancialRow): string {
+  return `[${row.Sheet_Name}, ${row.Financial_Type}, ${row.Data_Type}, ${row.Item_Code}, ${row.Month}, ${row.Year}]`
+}
+
 interface FinancialRow {
   Year: string
   Month: string
@@ -1147,7 +1153,7 @@ function handleTrendQuery(data: FinancialRow[], project: string, question: strin
   const matchedItemCode = parsed.itemCode || sheetData[0]?.Item_Code || ''
 
   // Collect values for each month
-  const trendData: Array<{ year: number; month: number; value: number; hasData: boolean }> = []
+  const trendData: Array<{ year: number; month: number; value: number; hasData: boolean; rows: FinancialRow[] }> = []
 
   for (const { year, month } of monthRange) {
     const monthRows = sheetData.filter(d => 
@@ -1156,9 +1162,9 @@ function handleTrendQuery(data: FinancialRow[], project: string, question: strin
     
     if (monthRows.length > 0) {
       const total = monthRows.reduce((sum, d) => sum + toNumber(d.Value), 0)
-      trendData.push({ year, month, value: total, hasData: true })
+      trendData.push({ year, month, value: total, hasData: true, rows: monthRows })
     } else {
-      trendData.push({ year, month, value: 0, hasData: false })
+      trendData.push({ year, month, value: 0, hasData: false, rows: [] })
     }
   }
 
@@ -1191,7 +1197,12 @@ function handleTrendQuery(data: FinancialRow[], project: string, question: strin
   for (const point of trendData) {
     const monthLabel = `${monthNames[point.month]} ${point.year}`
     if (point.hasData) {
-      response += `| ${monthLabel} | ${formatCurrency(point.value)} |\n`
+      const sourceRef = point.rows.length === 1 
+        ? ` ${formatSourceRef(point.rows[0])}` 
+        : point.rows.length > 1 
+          ? ` [${point.rows[0].Sheet_Name}, ${point.rows[0].Financial_Type}, ${point.rows[0].Data_Type}, ${point.rows[0].Item_Code}, ${point.month}, ${point.year}]`
+          : ''
+      response += `| ${monthLabel} | ${formatCurrency(point.value)}${sourceRef} |\n`
     } else {
       response += `| ${monthLabel} | — |\n`
     }
@@ -1439,11 +1450,19 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
   response += `**Table:** ${targetSheet}\n`
   response += `**Metric:** ${metricLabel}\n\n`
 
+  // Build source refs for each side
+  const sourceRef1 = result1.rows.length > 0 
+    ? ` ${formatSourceRef(result1.rows[0])}` 
+    : ''
+  const sourceRef2 = result2.rows.length > 0 
+    ? ` ${formatSourceRef(result2.rows[0])}` 
+    : ''
+
   // Table header
   response += `| Financial Type | ${metricLabel} |\n`
   response += `|----------------|${'-'.repeat(Math.max(metricLabel.length, 14))}|\n`
-  response += `| ${finType1} | ${formatCurrency(result1.total)} |\n`
-  response += `| ${finType2} | ${formatCurrency(result2.total)} |\n`
+  response += `| ${finType1} | ${formatCurrency(result1.total)}${sourceRef1} |\n`
+  response += `| ${finType2} | ${formatCurrency(result2.total)}${sourceRef2} |\n`
   response += `| Difference | ${arrow} ${formatCurrency(absDiff)} (${sign}${pctChange.toFixed(1)}%) |\n`
 
   response += `\n*Values in ('000)*`
@@ -1772,10 +1791,11 @@ function handleTotalQuery(data: FinancialRow[], project: string, question: strin
 
   for (const [itemCode, group] of sortedSubItems) {
     const description = group.dataType || '-'
-    response += `| ${itemCode} | ${description} | ${formatCurrency(group.total)} |\n`
+    const sourceRef = group.rows.length > 0 ? ` ${formatSourceRef(group.rows[0])}` : ''
+    response += `| ${itemCode} | ${description} | ${formatCurrency(group.total)}${sourceRef} |\n`
   }
 
-  response += `\n**Total: ${formatCurrency(grandTotal)}** ('000)\n`
+  response += `\n**Total: ${formatCurrency(grandTotal)}** [sum of ${sortedSubItems.length} items] ('000)\n`
 
   // Build candidates for drill-down
   const candidates = sortedSubItems.map(([itemCode, group], i) => ({
@@ -1809,6 +1829,8 @@ interface AnalysisItem {
   label2: string          // e.g., "Business Plan"
   difference: number
   percentage: number
+  sourceRef1: string      // source reference for value1
+  sourceRef2: string      // source reference for value2
 }
 
 interface AnalysisComparison {
@@ -2005,6 +2027,16 @@ function getFinancialStatusValue(data: FinancialRow[], project: string, itemCode
   return rows.reduce((sum, d) => sum + toNumber(d.Value), 0)
 }
 
+// Get rows for a specific item code and financial type from Financial Status sheet
+function getFinancialStatusRows(data: FinancialRow[], project: string, itemCode: string, financialType: string): FinancialRow[] {
+  return data.filter(d => 
+    d._project === project && 
+    d.Sheet_Name === 'Financial Status' && 
+    d.Item_Code === itemCode && 
+    d.Financial_Type === financialType
+  )
+}
+
 // Run a comparison between two financial types for a set of items
 function runComparison(
   data: FinancialRow[], 
@@ -2020,8 +2052,10 @@ function runComparison(
   let subIndex = 0
   
   for (const item of items) {
-    const val1 = getFinancialStatusValue(data, project, item.itemCode, finType1)
-    const val2 = getFinancialStatusValue(data, project, item.itemCode, finType2)
+    const rows1 = getFinancialStatusRows(data, project, item.itemCode, finType1)
+    const rows2 = getFinancialStatusRows(data, project, item.itemCode, finType2)
+    const val1 = rows1.reduce((sum, d) => sum + toNumber(d.Value), 0)
+    const val2 = rows2.reduce((sum, d) => sum + toNumber(d.Value), 0)
     
     // Skip if both are zero or either is missing
     if (val1 === 0 && val2 === 0) continue
@@ -2033,6 +2067,9 @@ function runComparison(
       const diff = Math.abs(val1 - val2)
       const pct = val2 !== 0 ? (diff / Math.abs(val2)) * 100 : 0
       
+      const sourceRef1 = rows1.length > 0 ? formatSourceRef(rows1[0]) : ''
+      const sourceRef2 = rows2.length > 0 ? formatSourceRef(rows2[0]) : ''
+      
       results.push({
         subIndex,
         itemCode: item.itemCode,
@@ -2042,7 +2079,9 @@ function runComparison(
         label1,
         label2,
         difference: diff,
-        percentage: pct
+        percentage: pct,
+        sourceRef1,
+        sourceRef2
       })
     }
   }
@@ -2218,7 +2257,9 @@ function handleAnalyzeQuery(data: FinancialRow[], project: string): FuzzyResult 
         for (const item of comp.items) {
           const arrow = comp.operator === 'lt' ? '↓' : '↑'
           const sign = comp.operator === 'lt' ? '-' : '+'
-          response += `   ${comp.comparisonIndex}.${item.subIndex} ${item.itemName}: ${item.label1} ${formatCurrency(item.value1)} < ${item.label2} ${formatCurrency(item.value2)} (${arrow}${formatCurrency(item.difference)}, ${sign}${item.percentage.toFixed(1)}%)\n`
+          const ref1 = item.sourceRef1 ? ` ${item.sourceRef1}` : ''
+          const ref2 = item.sourceRef2 ? ` ${item.sourceRef2}` : ''
+          response += `   ${comp.comparisonIndex}.${item.subIndex} ${item.itemName}: ${item.label1} ${formatCurrency(item.value1)}${ref1} < ${item.label2} ${formatCurrency(item.value2)}${ref2} (${arrow}${formatCurrency(item.difference)}, ${sign}${item.percentage.toFixed(1)}%)\n`
         }
       }
       response += `\n`
@@ -2237,7 +2278,9 @@ function handleAnalyzeQuery(data: FinancialRow[], project: string): FuzzyResult 
         for (const item of comp.items) {
           const arrow = '↑'
           const sign = '+'
-          response += `   ${comp.comparisonIndex}.${item.subIndex} ${item.itemName}: ${item.label1} ${formatCurrency(item.value1)} > ${item.label2} ${formatCurrency(item.value2)} (${arrow}${formatCurrency(item.difference)}, ${sign}${item.percentage.toFixed(1)}%)\n`
+          const ref1 = item.sourceRef1 ? ` ${item.sourceRef1}` : ''
+          const ref2 = item.sourceRef2 ? ` ${item.sourceRef2}` : ''
+          response += `   ${comp.comparisonIndex}.${item.subIndex} ${item.itemName}: ${item.label1} ${formatCurrency(item.value1)}${ref1} > ${item.label2} ${formatCurrency(item.value2)}${ref2} (${arrow}${formatCurrency(item.difference)}, ${sign}${item.percentage.toFixed(1)}%)\n`
         }
       }
       response += `\n`
@@ -2303,8 +2346,10 @@ function handleDetailQuery(data: FinancialRow[], project: string, question: stri
     let foundItems = 0
     
     for (const tier3 of thirdTierItems) {
-      const val1 = getFinancialStatusValue(data, project, tier3.itemCode, comparison.finType1)
-      const val2 = getFinancialStatusValue(data, project, tier3.itemCode, comparison.finType2)
+      const rows1 = getFinancialStatusRows(data, project, tier3.itemCode, comparison.finType1)
+      const rows2 = getFinancialStatusRows(data, project, tier3.itemCode, comparison.finType2)
+      const val1 = rows1.reduce((sum, d) => sum + toNumber(d.Value), 0)
+      const val2 = rows2.reduce((sum, d) => sum + toNumber(d.Value), 0)
       
       if (val1 === 0 && val2 === 0) continue
       
@@ -2318,7 +2363,9 @@ function handleDetailQuery(data: FinancialRow[], project: string, question: stri
       const sign = comparison.operator === 'lt' ? '-' : '+'
       totalDiff += diff
       
-      response += `| ${tier3.itemCode} ${tier3.itemName} | ${formatCurrency(val1)} | ${formatCurrency(val2)} | ${arrow}${formatCurrency(diff)} (${sign}${pct.toFixed(1)}%) |\n`
+      const ref1 = rows1.length > 0 ? ` ${formatSourceRef(rows1[0])}` : ''
+      const ref2 = rows2.length > 0 ? ` ${formatSourceRef(rows2[0])}` : ''
+      response += `| ${tier3.itemCode} ${tier3.itemName} | ${formatCurrency(val1)}${ref1} | ${formatCurrency(val2)}${ref2} | ${arrow}${formatCurrency(diff)} (${sign}${pct.toFixed(1)}%) |\n`
     }
     
     if (foundItems === 0) {
@@ -2347,8 +2394,10 @@ function handleDetailQuery(data: FinancialRow[], project: string, question: stri
       
       let foundThirdTier = false
       for (const tier3 of thirdTierItems) {
-        const val1 = getFinancialStatusValue(data, project, tier3.itemCode, comparison.finType1)
-        const val2 = getFinancialStatusValue(data, project, tier3.itemCode, comparison.finType2)
+        const rows1 = getFinancialStatusRows(data, project, tier3.itemCode, comparison.finType1)
+        const rows2 = getFinancialStatusRows(data, project, tier3.itemCode, comparison.finType2)
+        const val1 = rows1.reduce((sum, d) => sum + toNumber(d.Value), 0)
+        const val2 = rows2.reduce((sum, d) => sum + toNumber(d.Value), 0)
         
         if (val1 === 0 && val2 === 0) continue
         
@@ -2362,7 +2411,9 @@ function handleDetailQuery(data: FinancialRow[], project: string, question: stri
         const sign = comparison.operator === 'lt' ? '-' : '+'
         const symbol = comparison.operator === 'lt' ? '<' : '>'
         
-        response += `   - ${tier3.itemCode} ${tier3.itemName}: ${analysisItem.label1} ${formatCurrency(val1)} ${symbol} ${analysisItem.label2} ${formatCurrency(val2)} (${arrow}${formatCurrency(diff)}, ${sign}${pct.toFixed(1)}%)\n`
+        const ref1 = rows1.length > 0 ? ` ${formatSourceRef(rows1[0])}` : ''
+        const ref2 = rows2.length > 0 ? ` ${formatSourceRef(rows2[0])}` : ''
+        response += `   - ${tier3.itemCode} ${tier3.itemName}: ${analysisItem.label1} ${formatCurrency(val1)}${ref1} ${symbol} ${analysisItem.label2} ${formatCurrency(val2)}${ref2} (${arrow}${formatCurrency(diff)}, ${sign}${pct.toFixed(1)}%)\n`
       }
       
       if (!foundThirdTier) {
@@ -2727,12 +2778,23 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
   response += `• Data Type: ${targetDataType || 'All'}\n`
   response += `• Item Code: all\n\n`
 
-  response += `**Total: ${formatCurrency(total)}** ('000)\n\n`
+  // Build source ref for the total
+  const totalSourceRef = filtered.length === 1 
+    ? ` ${formatSourceRef(filtered[0])}` 
+    : filtered.length > 1 
+      ? ` [sum of ${filtered.length} rows]`
+      : ''
+  response += `**Total: ${formatCurrency(total)}${totalSourceRef}** ('000)\n\n`
 
   response += `**By Item Code:**\n`
   itemGroups.forEach((rows, itemCode) => {
     const itemTotal = rows.reduce((sum, d) => sum + toNumber(d.Value), 0)
-    response += `• Item ${itemCode}: ${formatCurrency(itemTotal)}\n`
+    const itemSourceRef = rows.length === 1 
+      ? ` ${formatSourceRef(rows[0])}` 
+      : rows.length > 1 
+        ? ` ${formatSourceRef(rows[0])}`
+        : ''
+    response += `• Item ${itemCode}: ${formatCurrency(itemTotal)}${itemSourceRef}\n`
   })
 
   // Create candidates for clickable selection
