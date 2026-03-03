@@ -2100,35 +2100,6 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
   // Extract the metric (Data_Type) to compare
   const targetDataType = extractComparisonMetric(expandedQuestion, dataTypes)
 
-  // Detect target sheet from query (e.g., "cashflow" → "Cash Flow")
-  const availableSheets = getUniqueValues(data, project, 'Sheet_Name')
-  let targetSheet = 'Financial Status'  // default
-  
-  // Check for sheet keywords in the query
-  const lowerQ = expandedQuestion.toLowerCase()
-  if (lowerQ.includes('cash flow') || lowerQ.includes('cashflow') || lowerQ.includes('cf ')) {
-    // Find matching Cash Flow sheet
-    const cfSheet = availableSheets.find(s => 
-      s.toLowerCase().includes('cash flow') || s.toLowerCase() === 'cashflow'
-    )
-    if (cfSheet) targetSheet = cfSheet
-  } else if (lowerQ.includes('projection') || lowerQ.includes('projected')) {
-    const projSheet = availableSheets.find(s => 
-      s.toLowerCase().includes('projection')
-    )
-    if (projSheet) targetSheet = projSheet
-  } else if (lowerQ.includes('accrual') || lowerQ.includes('accrued')) {
-    const accrualSheet = availableSheets.find(s => 
-      s.toLowerCase().includes('accrual')
-    )
-    if (accrualSheet) targetSheet = accrualSheet
-  } else if (lowerQ.includes('committed')) {
-    const committedSheet = availableSheets.find(s => 
-      s.toLowerCase().includes('committed')
-    )
-    if (committedSheet) targetSheet = committedSheet
-  }
-
   // Parse dates from both sides
   const date1 = parseDate(compParts.side1, defaultMonth)
   const date2 = parseDate(compParts.side2, defaultMonth)
@@ -2136,6 +2107,40 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
   // Determine comparison type: by Financial_Type or by Date
   const compareByDate = finType1 && finType1 === finType2 && (date1.month || date2.month)
   const compareByFinType = finType1 && finType2 && finType1 !== finType2
+
+  // Detect target sheet from query (e.g., "cashflow" → "Cash Flow")
+  // IMPORTANT: For cross-type comparisons (compareByFinType), ALWAYS use Financial Status
+  // because only Financial Status has all Financial Types in one sheet.
+  // Sheet override only applies to same-type date comparisons (compareByDate).
+  const availableSheets = getUniqueValues(data, project, 'Sheet_Name')
+  let targetSheet = 'Financial Status'  // default
+  
+  const lowerQ = expandedQuestion.toLowerCase()
+  if (compareByDate) {
+    // Only override sheet for same-type date comparisons
+    if (lowerQ.includes('cash flow') || lowerQ.includes('cashflow') || lowerQ.includes('cf ')) {
+      const cfSheet = availableSheets.find(s => 
+        s.toLowerCase().includes('cash flow') || s.toLowerCase() === 'cashflow'
+      )
+      if (cfSheet) targetSheet = cfSheet
+    } else if (lowerQ.includes('projection') || lowerQ.includes('projected')) {
+      const projSheet = availableSheets.find(s => 
+        s.toLowerCase().includes('projection')
+      )
+      if (projSheet) targetSheet = projSheet
+    } else if (lowerQ.includes('accrual') || lowerQ.includes('accrued')) {
+      const accrualSheet = availableSheets.find(s => 
+        s.toLowerCase().includes('accrual')
+      )
+      if (accrualSheet) targetSheet = accrualSheet
+    } else if (lowerQ.includes('committed')) {
+      const committedSheet = availableSheets.find(s => 
+        s.toLowerCase().includes('committed')
+      )
+      if (committedSheet) targetSheet = committedSheet
+    }
+  }
+  // For compareByFinType: keep targetSheet = 'Financial Status' (has all types)
 
   if (!compareByDate && !compareByFinType) {
     // Can't determine comparison type - fall back to normal query
