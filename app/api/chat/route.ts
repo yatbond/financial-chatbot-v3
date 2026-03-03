@@ -247,6 +247,8 @@ interface CompareContext {
   date1?: { month?: string | null; year?: string | null }
   date2?: { month?: string | null; year?: string | null }
   parentItemCode?: string  // Parent item code for finding children
+  displayFinType?: string  // Short display name (e.g., "Cash Flow" instead of full Financial_Type)
+  actualFinType?: string   // Actual Financial_Type from the data (e.g., "Cash Flow" from Cash Flow sheet)
 }
 
 // Global cache for last Compare context (per project)
@@ -1597,6 +1599,7 @@ function handleDetailCompare(
   const hasMore = startIndex + pageSize < context.children.length
 
   // Build comparison labels based on comparison type
+  // Use displayFinType for friendly labels (e.g., "Cash Flow" not "Cash Flow Actual received & paid as at")
   let label1: string, label2: string
   if (context.isCompareByDate && context.date1 && context.date2) {
     const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -1604,11 +1607,25 @@ function handleDetailCompare(
     const y1 = context.date1.year || ''
     const m2 = context.date2.month ? monthNames[parseInt(context.date2.month)] : ''
     const y2 = context.date2.year || ''
-    label1 = `${context.finType1} (${m1} ${y1})`.trim()
-    label2 = `${context.finType1} (${m2} ${y2})`.trim()
+    const displayName = context.displayFinType || context.finType1
+    label1 = `${displayName} (${m1} ${y1})`.trim()
+    label2 = `${displayName} (${m2} ${y2})`.trim()
   } else {
     label1 = context.finType1
     label2 = context.finType2
+  }
+
+  // Helper: match Financial_Type flexibly (exact OR contains)
+  // Needed because Cash Flow sheet has Financial_Type="Cash Flow" but
+  // matchFinancialType returns "Cash Flow Actual received & paid as at"
+  const matchFinType = (rowFinType: string, targetFinType: string): boolean => {
+    if (rowFinType === targetFinType) return true
+    // Also check actualFinType from cache (the real Financial_Type from data)
+    if (context.actualFinType && rowFinType === context.actualFinType) return true
+    // Contains matching as fallback
+    const rowLower = rowFinType.toLowerCase()
+    const targetLower = targetFinType.toLowerCase()
+    return rowLower.includes(targetLower) || targetLower.includes(rowLower)
   }
 
   let response = `## Detail: Comparing Sub-Items\n\n`
@@ -1626,14 +1643,14 @@ function handleDetailCompare(
       // Compare by date: same Financial_Type, different dates
       filtered1 = projectData.filter(d => 
         d.Sheet_Name === context.targetSheet &&
-        d.Financial_Type === context.finType1 &&
+        matchFinType(d.Financial_Type, context.finType1) &&
         d.Item_Code === child.code &&
         (context.date1!.month ? d.Month === context.date1!.month : true) &&
         (context.date1!.year ? d.Year === context.date1!.year : true)
       )
       filtered2 = projectData.filter(d => 
         d.Sheet_Name === context.targetSheet &&
-        d.Financial_Type === context.finType1 &&
+        matchFinType(d.Financial_Type, context.finType1) &&
         d.Item_Code === child.code &&
         (context.date2!.month ? d.Month === context.date2!.month : true) &&
         (context.date2!.year ? d.Year === context.date2!.year : true)
@@ -1642,12 +1659,12 @@ function handleDetailCompare(
       // Compare by Financial_Type: different types, optionally filtered by date
       filtered1 = projectData.filter(d => 
         d.Sheet_Name === context.targetSheet &&
-        d.Financial_Type === context.finType1 &&
+        matchFinType(d.Financial_Type, context.finType1) &&
         d.Item_Code === child.code
       )
       filtered2 = projectData.filter(d => 
         d.Sheet_Name === context.targetSheet &&
-        d.Financial_Type === context.finType2 &&
+        matchFinType(d.Financial_Type, context.finType2) &&
         d.Item_Code === child.code
       )
     }
@@ -2284,6 +2301,14 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
     return 0
   })
 
+  // Determine display name and actual Financial_Type from retrieved data
+  // For Cash Flow sheet, data has Financial_Type = "Cash Flow" (short)
+  // but matchFinancialType returns "Cash Flow Actual received & paid as at" (long)
+  const actualFinType1 = result1.rows.length > 0 ? result1.rows[0].Financial_Type : finType1!
+  const displayLabel = compareByDate
+    ? (result1.rows.length > 0 ? result1.rows[0].Sheet_Name : targetSheet)
+    : finType1!
+
   // Save context for Detail drill-down
   compareContextCache.set(project, {
     finType1: compareByDate ? finType1! : finType1!,
@@ -2295,7 +2320,9 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
     isCompareByDate: !!compareByDate,
     date1: compareByDate ? date1 : undefined,
     date2: compareByDate ? date2 : undefined,
-    parentItemCode
+    parentItemCode,
+    displayFinType: displayLabel,
+    actualFinType: actualFinType1
   })
   lastCompareDetailPage = 0
 
