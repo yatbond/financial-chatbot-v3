@@ -242,6 +242,11 @@ interface CompareContext {
   targetDataType: string | null
   project: string
   children: Array<{ code: string; name: string }>  // Cached children list
+  // For compareByDate support
+  isCompareByDate: boolean
+  date1?: { month?: string | null; year?: string | null }
+  date2?: { month?: string | null; year?: string | null }
+  parentItemCode?: string  // Parent item code for finding children
 }
 
 // Global cache for last Compare context (per project)
@@ -1422,10 +1427,7 @@ function handleDetailTrend(
   
   const context = trendContextCache.get(project)
   if (!context) {
-    return { 
-      text: '❌ No previous Trend query found. Please run a Trend query first (e.g., "trend cashflow cost")', 
-      candidates: [] 
-    }
+    return null  // Let other detail handlers (Compare, Analyze) try
   }
 
   // Handle "detail N" - drill down into specific child
@@ -1594,28 +1596,61 @@ function handleDetailCompare(
   const childrenToShow = context.children.slice(startIndex, startIndex + pageSize)
   const hasMore = startIndex + pageSize < context.children.length
 
-  let response = `## Detail: Comparing Sub-Items\n\n`
-  response += `**Comparing:** ${context.finType1} vs ${context.finType2}\n`
-  response += `**Metric:** ${context.targetDataType || 'All items'}\n\n`
+  // Build comparison labels based on comparison type
+  let label1: string, label2: string
+  if (context.isCompareByDate && context.date1 && context.date2) {
+    const monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    const m1 = context.date1.month ? monthNames[parseInt(context.date1.month)] : ''
+    const y1 = context.date1.year || ''
+    const m2 = context.date2.month ? monthNames[parseInt(context.date2.month)] : ''
+    const y2 = context.date2.year || ''
+    label1 = `${context.finType1} (${m1} ${y1})`.trim()
+    label2 = `${context.finType1} (${m2} ${y2})`.trim()
+  } else {
+    label1 = context.finType1
+    label2 = context.finType2
+  }
 
-  // Parse dates from the original comparison (if any)
-  // For simplicity, we'll show the comparison for each child item
+  let response = `## Detail: Comparing Sub-Items\n\n`
+  response += `**Comparing:** ${label1} vs ${label2}\n`
+  response += `**Metric:** ${context.targetDataType || 'All items'}\n\n`
 
   let tableIndex = startIndex
   for (const child of childrenToShow) {
     tableIndex++
     
-    // Get values for this child from both Financial Types
-    let filtered1 = projectData.filter(d => 
-      d.Sheet_Name === context.targetSheet &&
-      d.Financial_Type === context.finType1 &&
-      d.Item_Code === child.code
-    )
-    let filtered2 = projectData.filter(d => 
-      d.Sheet_Name === context.targetSheet &&
-      d.Financial_Type === context.finType2 &&
-      d.Item_Code === child.code
-    )
+    let filtered1: FinancialRow[]
+    let filtered2: FinancialRow[]
+    
+    if (context.isCompareByDate && context.date1 && context.date2) {
+      // Compare by date: same Financial_Type, different dates
+      filtered1 = projectData.filter(d => 
+        d.Sheet_Name === context.targetSheet &&
+        d.Financial_Type === context.finType1 &&
+        d.Item_Code === child.code &&
+        (context.date1!.month ? d.Month === context.date1!.month : true) &&
+        (context.date1!.year ? d.Year === context.date1!.year : true)
+      )
+      filtered2 = projectData.filter(d => 
+        d.Sheet_Name === context.targetSheet &&
+        d.Financial_Type === context.finType1 &&
+        d.Item_Code === child.code &&
+        (context.date2!.month ? d.Month === context.date2!.month : true) &&
+        (context.date2!.year ? d.Year === context.date2!.year : true)
+      )
+    } else {
+      // Compare by Financial_Type: different types, optionally filtered by date
+      filtered1 = projectData.filter(d => 
+        d.Sheet_Name === context.targetSheet &&
+        d.Financial_Type === context.finType1 &&
+        d.Item_Code === child.code
+      )
+      filtered2 = projectData.filter(d => 
+        d.Sheet_Name === context.targetSheet &&
+        d.Financial_Type === context.finType2 &&
+        d.Item_Code === child.code
+      )
+    }
     
     const value1 = filtered1.reduce((sum, d) => sum + toNumber(d.Value), 0)
     const value2 = filtered2.reduce((sum, d) => sum + toNumber(d.Value), 0)
@@ -1635,8 +1670,8 @@ function handleDetailCompare(
     const sourceRef1 = filtered1.length > 0 ? ` ${formatSourceRef(filtered1[0])}` : ''
     const sourceRef2 = filtered2.length > 0 ? ` ${formatSourceRef(filtered2[0])}` : ''
     
-    response += `| ${context.finType1} | ${formatCurrency(value1)}${sourceRef1} |\n`
-    response += `| ${context.finType2} | ${formatCurrency(value2)}${sourceRef2} |\n`
+    response += `| ${label1} | ${formatCurrency(value1)}${sourceRef1} |\n`
+    response += `| ${label2} | ${formatCurrency(value2)}${sourceRef2} |\n`
     response += `| Diff | ${arrow} ${formatCurrency(absDiff)} (${sign}${pctChange.toFixed(1)}%) |\n\n`
   }
 
@@ -2200,11 +2235,41 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
   const seenChildCodes = new Set<string>()
   const allRows = [...result1.rows, ...result2.rows]
   
-  // Get unique item codes from the comparison results
-  for (const row of allRows) {
-    if (row.Item_Code && !seenChildCodes.has(row.Item_Code)) {
-      seenChildCodes.add(row.Item_Code)
-      children.push({ code: row.Item_Code, name: row.Data_Type })
+  // Get the parent item code from the results
+  let parentItemCode: string | undefined
+  if (targetDataType) {
+    const targetItemCode = getItemCodeFromMetric(targetDataType)
+    if (targetItemCode) {
+      parentItemCode = targetItemCode
+    } else if (allRows.length > 0) {
+      parentItemCode = allRows[0].Item_Code
+    }
+  } else if (allRows.length > 0) {
+    parentItemCode = allRows[0].Item_Code
+  }
+  
+  if (compareByDate && parentItemCode) {
+    // For compareByDate, find children of the parent item
+    const childPrefix = parentItemCode + '.'
+    for (const row of projectData) {
+      if (row.Sheet_Name === targetSheet && 
+          row.Item_Code.startsWith(childPrefix) &&
+          !seenChildCodes.has(row.Item_Code)) {
+        // Only include direct children (one level deeper)
+        const remaining = row.Item_Code.slice(childPrefix.length)
+        if (!remaining.includes('.')) {
+          seenChildCodes.add(row.Item_Code)
+          children.push({ code: row.Item_Code, name: row.Data_Type })
+        }
+      }
+    }
+  } else {
+    // For compareByFinType, get unique item codes from the comparison results
+    for (const row of allRows) {
+      if (row.Item_Code && !seenChildCodes.has(row.Item_Code)) {
+        seenChildCodes.add(row.Item_Code)
+        children.push({ code: row.Item_Code, name: row.Data_Type })
+      }
     }
   }
   
@@ -2226,7 +2291,11 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
     targetSheet,
     targetDataType,
     project,
-    children
+    children,
+    isCompareByDate: compareByDate || false,
+    date1: compareByDate ? date1 : undefined,
+    date2: compareByDate ? date2 : undefined,
+    parentItemCode
   })
   lastCompareDetailPage = 0
 
@@ -3296,6 +3365,15 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
   // Step 0b1: Check if this is a Detail Compare command (after Compare query)
   const detailCompareResult = handleDetailCompare(data, project, question, defaultMonth)
   if (detailCompareResult) return detailCompareResult
+
+  // Step 0b1a: Fallback for "detail" or "more" commands when no context found
+  const lowerQ = question.toLowerCase().trim()
+  if (lowerQ === 'detail' || lowerQ === 'more') {
+    return {
+      text: '❌ No previous query found to drill down into.\n\nPlease run a query first:\n• **Compare:** e.g., "compare cash flow oct 2025 vs jan 2026"\n• **Trend:** e.g., "trend cashflow cost"\n• **Analyze:** e.g., "analyze gross profit"\n\nThen type **detail** to see sub-items.',
+      candidates: []
+    }
+  }
 
   // Step 0b: Check if this is a comparison query — handle it with dedicated logic
   const comparisonResult = handleComparisonQuery(data, project, question, defaultMonth)
