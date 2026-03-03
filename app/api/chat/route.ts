@@ -2292,7 +2292,7 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
     targetDataType,
     project,
     children,
-    isCompareByDate: compareByDate || false,
+    isCompareByDate: !!compareByDate,
     date1: compareByDate ? date1 : undefined,
     date2: compareByDate ? date2 : undefined,
     parentItemCode
