@@ -806,6 +806,19 @@ function parseDate(question: string, defaultMonth: string): ParsedQuery {
     }
   }
 
+  // Handle numeric month with 4-digit year: "10 2025" or "1 2026"
+  // Pattern: standalone number (1-12) followed by space and 4-digit year
+  const numericMonthYearMatch = lowerQ.match(/\b(\d{1,2})\s+(20[2-4]\d)\b/)
+  if (numericMonthYearMatch) {
+    const monthNum = parseInt(numericMonthYearMatch[1])
+    const yearNum = numericMonthYearMatch[2]
+    // Validate month is 1-12
+    if (monthNum >= 1 && monthNum <= 12) {
+      result.month = String(monthNum)
+      result.year = yearNum
+    }
+  }
+
   // Find 2-digit year (24, 25, etc.) - only if preceded by space and not part of month name
   // "feb 25" should be Feb + 2025, not Feb + month 25
   const twoDigitYearMatch = lowerQ.match(/\b(\d{2})\b(?!.*\d{4})/)
@@ -817,14 +830,17 @@ function parseDate(question: string, defaultMonth: string): ParsedQuery {
   }
 
   // Find month name or abbreviation - only if it doesn't conflict with year
-  for (let i = 0; i < monthNames.length; i++) {
-    if (lowerQ.includes(monthNames[i]) || lowerQ.includes(monthAbbr[i])) {
-      const monthNum = String(i + 1)
-      // Only set month if it doesn't look like a year (e.g., don't treat "2025" as month 20)
-      if (monthNum.length === 1 || (monthNum.length === 2 && monthNum !== '20' && monthNum !== '21' && monthNum !== '22' && monthNum !== '23')) {
-        result.month = monthNum
+  // Skip if we already found a numeric month
+  if (!result.month) {
+    for (let i = 0; i < monthNames.length; i++) {
+      if (lowerQ.includes(monthNames[i]) || lowerQ.includes(monthAbbr[i])) {
+        const monthNum = String(i + 1)
+        // Only set month if it doesn't look like a year (e.g., don't treat "2025" as month 20)
+        if (monthNum.length === 1 || (monthNum.length === 2 && monthNum !== '20' && monthNum !== '21' && monthNum !== '22' && monthNum !== '23')) {
+          result.month = monthNum
+        }
+        break
       }
-      break
     }
   }
 
@@ -1984,24 +2000,58 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
     // - Cash Flow sheet (monthly data) for historical months
     // - Financial Status sheet (Cash Flow Actual received & paid as at) for current month
     
+    // Get Item_Code for exact matching (avoids matching children)
+    const targetItemCode = getItemCodeFromMetric(targetDataType)
+    
+    // Helper to find the actual sheet name that matches a pattern
+    const findMatchingSheet = (pattern: string): string | null => {
+      const patternLower = pattern.toLowerCase()
+      return availableSheets.find(s => 
+        s.toLowerCase() === patternLower || 
+        s.toLowerCase().includes(patternLower) ||
+        patternLower.includes(s.toLowerCase())
+      ) || null
+    }
+    
+    // Find the actual Cash Flow sheet name
+    const cashFlowSheet = findMatchingSheet('Cash Flow') || findMatchingSheet('Cashflow')
+    
     // Helper to find data for a specific date and metric
     const findValueForDate = (date: { month?: string | null; year?: string | null }): { total: number; rows: FinancialRow[]; label: string } => {
       // Try multiple sources in order of preference
-      const sources = [
-        { sheet: 'Cash Flow', finType: 'Cash Flow' },
-        { sheet: 'Financial Status', finType: 'Cash Flow Actual received & paid as at' },
-        { sheet: 'Financial Status', finType: finType1! },
-        { sheet: targetSheet, finType: finType1! },
-      ]
+      // Use actual sheet names found in the data
+      const sources: Array<{ sheet: string | null; finTypePattern: string; displayFinType: string }> = []
       
-      // Get Item_Code for exact matching (avoids matching children)
-      const targetItemCode = getItemCodeFromMetric(targetDataType)
+      // For cash flow queries, prefer the Cash Flow sheet
+      // Try multiple financial type patterns that might exist in the data
+      if (cashFlowSheet) {
+        sources.push({ sheet: cashFlowSheet, finTypePattern: 'Cash Flow', displayFinType: 'Cash Flow' })
+        sources.push({ sheet: cashFlowSheet, finTypePattern: 'Cash Flow Actual', displayFinType: 'Cash Flow' })
+        sources.push({ sheet: cashFlowSheet, finTypePattern: '', displayFinType: 'Cash Flow' }) // Any financial type
+      }
+      // Fallback to Financial Status with various financial type names
+      sources.push({ sheet: 'Financial Status', finTypePattern: 'Cash Flow Actual received & paid as at', displayFinType: 'Cash Flow' })
+      if (finType1) {
+        sources.push({ sheet: 'Financial Status', finTypePattern: finType1, displayFinType: finType1 })
+      }
+      if (targetSheet && targetSheet !== 'Financial Status') {
+        sources.push({ sheet: targetSheet, finTypePattern: '', displayFinType: finType1 || 'Cash Flow' })
+      }
       
       for (const source of sources) {
+        if (!source.sheet) continue
+        
         let filtered = projectData.filter(d => 
-          d.Sheet_Name === source.sheet && 
-          d.Financial_Type === source.finType
+          d.Sheet_Name === source.sheet
         )
+        
+        // Filter by financial type pattern (empty pattern means accept any)
+        if (source.finTypePattern) {
+          filtered = filtered.filter(d => 
+            d.Financial_Type === source.finTypePattern || 
+            d.Financial_Type.toLowerCase().includes(source.finTypePattern.toLowerCase())
+          )
+        }
         
         // Use EXACT Item_Code match if available, otherwise exact Data_Type match
         if (targetItemCode) {
@@ -2020,15 +2070,17 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
         
         if (filtered.length > 0) {
           const total = filtered.reduce((sum, d) => sum + toNumber(d.Value), 0)
+          // Use the display financial type for the label, not the actual data value
           return { 
             total, 
             rows: filtered, 
-            label: `${source.finType} (${date.month}/${date.year})` 
+            label: `${source.displayFinType} (${date.month}/${date.year})`,
+            actualSheet: source.sheet
           }
         }
       }
       
-      return { total: 0, rows: [], label: `${finType1} (${date.month}/${date.year})` }
+      return { total: 0, rows: [], label: `${finType1 || 'Cash Flow'} (${date.month}/${date.year})`, actualSheet: null }
     }
 
     const r1 = findValueForDate(date1)
