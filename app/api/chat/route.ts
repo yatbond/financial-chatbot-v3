@@ -632,8 +632,9 @@ function handleMonthlyCategory(data: FinancialRow[], project: string, question: 
     'manpower (labour) for works': '2.5',
     'manpower (labour)': '2.5',
     'manpower': '2.5',
-    'subcontractor': '2.5',
-    'subcon': '2.5',
+    'subcontractor': '2.4',
+    'subcon': '2.4',
+    'subbie': '2.4',
     'staff': '2.6',
     'admin': '2.7',
     'administration': '2.7',
@@ -1832,23 +1833,30 @@ function extractComparisonMetric(expandedQuestion: string, dataTypes: string[]):
     'claims': 'claim',
   }
 
-  for (const [keyword, targetName] of Object.entries(compareMetricMap)) {
-    if (lowerQ.includes(keyword)) {
-      // Find Data_Type that matches the target name at the right level
-      // Prefer shorter matches (parent level) over longer matches (child level)
-      const matches = dataTypes.filter(dt => {
-        const dtLower = dt.toLowerCase()
-        // Match if Data_Type contains the target as a segment
-        return dtLower.includes(' - ' + targetName + ' -') ||
-               dtLower.includes(' - ' + targetName) ||
-               dtLower === targetName ||
-               dtLower.endsWith(' ' + targetName)
-      })
-      if (matches.length > 0) {
-        // Sort by length - shortest first (parent level)
-        matches.sort((a, b) => a.length - b.length)
-        return matches[0]
-      }
+  // Sort keywords by length (longest first) to match more specific terms before substrings
+  // e.g., "subbie contract works" before "contract works", "subcontractor" before "contract"
+  const sortedEntries = Object.entries(compareMetricMap).sort((a, b) => b[0].length - a[0].length)
+  
+  for (const [keyword, targetName] of sortedEntries) {
+    // Use word boundary matching to prevent substring false positives
+    // e.g., "subcontractor" should NOT match "contract works"
+    const keywordPattern = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+    if (!keywordPattern.test(lowerQ)) continue
+    
+    // Find Data_Type that matches the target name at the right level
+    // Prefer shorter matches (parent level) over longer matches (child level)
+    const matches = dataTypes.filter(dt => {
+      const dtLower = dt.toLowerCase()
+      // Match if Data_Type contains the target as a segment
+      return dtLower.includes(' - ' + targetName + ' -') ||
+             dtLower.includes(' - ' + targetName) ||
+             dtLower === targetName ||
+             dtLower.endsWith(' ' + targetName)
+    })
+    if (matches.length > 0) {
+      // Sort by length - shortest first (parent level)
+      matches.sort((a, b) => a.length - b.length)
+      return matches[0]
     }
   }
 
