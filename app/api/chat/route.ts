@@ -2105,13 +2105,12 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
           return { 
             total, 
             rows: filtered, 
-            label: `${source.displayFinType} (${date.month}/${date.year})`,
-            actualSheet: source.sheet
+            label: `${source.displayFinType} (${date.month}/${date.year})`
           }
         }
       }
       
-      return { total: 0, rows: [], label: `${finType1 || 'Cash Flow'} (${date.month}/${date.year})`, actualSheet: null }
+      return { total: 0, rows: [], label: `${finType1 || 'Cash Flow'} (${date.month}/${date.year})` }
     }
 
     const r1 = findValueForDate(date1)
