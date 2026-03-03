@@ -1673,14 +1673,23 @@ function handleDetailCompare(
   // Helper: match Financial_Type flexibly (exact OR contains)
   // Needed because Cash Flow sheet has Financial_Type="Cash Flow" but
   // matchFinancialType returns "Cash Flow Actual received & paid as at"
+  // NOTE: actualFinType is only used for compareByDate (same type, different dates)
+  // For compareByFinType, we must NOT leak actualFinType across both sides
   const matchFinType = (rowFinType: string, targetFinType: string): boolean => {
     if (rowFinType === targetFinType) return true
-    // Also check actualFinType from cache (the real Financial_Type from data)
-    if (context.actualFinType && rowFinType === context.actualFinType) return true
-    // Contains matching as fallback
+    // Only use actualFinType for compareByDate (both sides are the same type)
+    if (context.isCompareByDate && context.actualFinType && rowFinType === context.actualFinType) return true
+    // Contains matching as fallback — but only if one is a clear substring of the other
+    // and they share meaningful keywords (not just short words)
     const rowLower = rowFinType.toLowerCase()
     const targetLower = targetFinType.toLowerCase()
-    return rowLower.includes(targetLower) || targetLower.includes(rowLower)
+    // Only match if the shorter string is at least 60% of the longer string length
+    // This prevents "Cash Flow" matching "Cash Flow Actual received & paid as at" incorrectly
+    if (rowLower === targetLower) return true
+    const shorter = rowLower.length < targetLower.length ? rowLower : targetLower
+    const longer = rowLower.length < targetLower.length ? targetLower : rowLower
+    if (longer.includes(shorter) && shorter.length >= longer.length * 0.6) return true
+    return false
   }
 
   let response = `## Detail: Comparing Sub-Items\n\n`
