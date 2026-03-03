@@ -1789,8 +1789,11 @@ function getItemCodeFromMetric(metricName: string | null): string | null {
   if (!metricName) return null
   const lowerMetric = metricName.toLowerCase()
   
-  // Direct lookup in PARENT_ITEM_MAP
-  for (const [keyword, info] of Object.entries(PARENT_ITEM_MAP)) {
+  // Sort entries by length (longest first) to match more specific terms before substrings
+  // e.g., "less : cost - subcontractor" should match "subcontractor" (2.4) not "cost" (2.2)
+  const sortedEntries = Object.entries(PARENT_ITEM_MAP).sort((a, b) => b[0].length - a[0].length)
+  
+  for (const [keyword, info] of sortedEntries) {
     if (lowerMetric.includes(keyword)) {
       return info.code
     }
