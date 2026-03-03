@@ -2325,8 +2325,8 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
     parentItemCode = allRows[0].Item_Code
   }
   
-  if (compareByDate && parentItemCode) {
-    // For compareByDate, find children of the parent item
+  if (parentItemCode) {
+    // Find direct children of the parent item in the target sheet
     const childPrefix = parentItemCode + '.'
     for (const row of projectData) {
       if (row.Sheet_Name === targetSheet && 
@@ -2341,7 +2341,7 @@ function handleComparisonQuery(data: FinancialRow[], project: string, question: 
       }
     }
   } else {
-    // For compareByFinType, get unique item codes from the comparison results
+    // Fallback: get unique item codes from the comparison results
     for (const row of allRows) {
       if (row.Item_Code && !seenChildCodes.has(row.Item_Code)) {
         seenChildCodes.add(row.Item_Code)
