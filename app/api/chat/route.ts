@@ -82,18 +82,18 @@ import { google } from 'googleapis'
  *
  * DATA TYPE / ITEM SHORTCUTS (ACRONYM_MAP below):
  *   gp                → Gross Profit (Item 3)
- *   np, net profit    → Net Profit (Item 7)
+ *   np, net profit    → Acc. Net Profit/(Loss) (Item 7)
  *   cost, total cost  → Less : Cost (Item 2)
- *   prelim, preliminary, preliminaries → Preliminaries (Item 2.1)
+ *   prelim, preliminary, preliminaries, total prelim → Preliminaries (Item 2.1)
+ *   supervision, staff → Manpower (Mgt. & Supervision) (Item 2.1.1)
  *   material, materials, material cost → Materials (Item 2.2)
  *   plant, machinery, all plant        → Plant & Machinery (Item 2.3)
- *   subcon, sub, subbie, subcontractors → Subcontractor (Item 2.4)
- *   contract works, subbie/subcon contract works → Contract works (Item 2.4.1)
- *   vo, variation, subbie/subcon vo/variation → Variation (Item 2.4.2)
- *   claim, claims, subbie/subcon claim → Claim (Item 2.4.3)
- *   supervision, staff → Manpower (Mgt. & Supervision) (Item 2.1.1)
+ *   subcon, sub, subbie, subcontractor, subcontractors → Less : Cost - Subcontractor (Item 2.4)
+ *   contract works, subbie/subcon/subcontractors contract works → -Contract Works (Item 2.4.1)
+ *   vo, variation(s), subbie/subcon/subcontractors vo/variation(s) → -Variation (Item 2.4.2)
+ *   claim(s), subbie/subcon/subcontractors claim(s) → -Claim (Item 2.4.3)
+ *   labour, labor     → Manpower (Labour) (Item 2.5)
  *   rebar             → Reinforcement (Item 2.6)
- *   labour, labor     → Manpower (Labour)
  *   income, revenue   → Income (Item 1)
  *   profit            → Gross Profit (Item 3)
  *   loss              → Net Loss
@@ -155,24 +155,30 @@ const ACRONYM_MAP: Record<string, string> = {
   'contract works': 'contract works',
   'subbie contract works': 'contract works',
   'subcon contract works': 'contract works',
+  'subcontractors contract works': 'contract works',
 
   // === Item / category shortcuts (Item_Code 2.4.2 - Variation) ===
   'vo': 'variation',
   'variations': 'variation',
   'subbie vo': 'variation',
   'subcon vo': 'variation',
+  'subcontractors vo': 'variation',
   'subbie variation': 'variation',
   'subcon variation': 'variation',
+  'subcontractors variation': 'variation',
   'subbie variations': 'variation',
   'subcon variations': 'variation',
+  'subcontractors variations': 'variation',
 
   // === Item / category shortcuts (Item_Code 2.4.3 - Claim) ===
   'claim': 'claim',
   'claims': 'claim',
   'subbie claim': 'claim',
   'subcon claim': 'claim',
+  'subcontractors claim': 'claim',
   'subbie claims': 'claim',
   'subcon claims': 'claim',
+  'subcontractors claims': 'claim',
 
   // === Other shortcuts ===
   'rebar': 'reinforcement',
@@ -633,6 +639,7 @@ function handleMonthlyCategory(data: FinancialRow[], project: string, question: 
     'manpower (labour)': '2.5',
     'manpower': '2.5',
     'subcontractor': '2.4',
+    'subcontractors': '2.4',
     'subcon': '2.4',
     'subbie': '2.4',
     'staff': '2.6',
@@ -1825,15 +1832,20 @@ function extractComparisonMetric(expandedQuestion: string, dataTypes: string[]):
   // This prevents matching child items (e.g., "Contract Works" instead of "Subcontractor")
   const compareMetricMap: Record<string, string> = {
     'subcontractor': 'subcontractor',
+    'subcontractors': 'subcontractor',
     'subbie': 'subcontractor',
     'subcon': 'subcontractor',
     'preliminaries': 'preliminaries',
     'prelim': 'preliminaries',
+    'total prelim': 'preliminaries',
     'materials': 'materials',
     'material': 'materials',
+    'material cost': 'materials',
     'plant': 'plant and machinery',
     'machinery': 'plant and machinery',
+    'all plant': 'plant and machinery',
     'labour': 'labour',
+    'labor': 'labour',
     'staff': 'supervision',
     'supervision': 'supervision',
     'cost': 'less : cost',
@@ -1846,10 +1858,29 @@ function extractComparisonMetric(expandedQuestion: string, dataTypes: string[]):
     'revenue': 'income',
     'overhead': 'overhead',
     'contract works': 'contract works',
+    'subbie contract works': 'contract works',
+    'subcon contract works': 'contract works',
+    'subcontractors contract works': 'contract works',
     'variation': 'variation',
+    'variations': 'variation',
     'vo': 'variation',
+    'subbie vo': 'variation',
+    'subcon vo': 'variation',
+    'subcontractors vo': 'variation',
+    'subbie variation': 'variation',
+    'subcon variation': 'variation',
+    'subcontractors variation': 'variation',
+    'subbie variations': 'variation',
+    'subcon variations': 'variation',
+    'subcontractors variations': 'variation',
     'claim': 'claim',
     'claims': 'claim',
+    'subbie claim': 'claim',
+    'subcon claim': 'claim',
+    'subcontractors claim': 'claim',
+    'subbie claims': 'claim',
+    'subcon claims': 'claim',
+    'subcontractors claims': 'claim',
   }
 
   // Sort keywords by length (longest first) to match more specific terms before substrings
