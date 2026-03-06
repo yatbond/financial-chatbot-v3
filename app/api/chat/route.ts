@@ -652,8 +652,8 @@ function handleMonthlyCategory(data: FinancialRow[], project: string, question: 
     'materials': '2.2',
     'plant': '2.3',
     'machinery': '2.3',
-    'labour': '2.4',
-    'labor': '2.4',
+    'labour': '2.5',
+    'labor': '2.5',
     'manpower (labour) for works': '2.5',
     'manpower (labour)': '2.5',
     'manpower': '2.5',
@@ -2215,8 +2215,8 @@ function extractComparisonMetric(expandedQuestion: string, dataTypes: string[]):
     'labor': 'labour',
     'staff': 'supervision',
     'supervision': 'supervision',
-    'cost': 'less : cost',
-    'total cost': 'less : cost',
+    'cost': 'cost',
+    'total cost': 'total cost',
     'gross profit': 'gross profit',
     'gp': 'gross profit',
     'net profit': 'net profit',
@@ -2260,7 +2260,17 @@ function extractComparisonMetric(expandedQuestion: string, dataTypes: string[]):
     const keywordPattern = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
     if (!keywordPattern.test(lowerQ)) continue
     
-    // Find Data_Type that matches the target name at the right level
+    // PRIORITY 1: Look up Item_Code directly from PARENT_ITEM_MAP
+    // This is more reliable than Data_Type text matching because it avoids
+    // accidentally matching child items (e.g., "Subcontractor - -Contract Works"
+    // when we want "Subcontractor" parent). The caller will then use exact
+    // Item_Code filtering (d.Item_Code === targetItemCode).
+    const parentEntry = PARENT_ITEM_MAP[targetName]
+    if (parentEntry) {
+      return { metric: null, itemCode: parentEntry.code }
+    }
+    
+    // PRIORITY 2: Fall back to Data_Type text matching if no PARENT_ITEM_MAP entry
     // Prefer shorter matches (parent level) over longer matches (child level)
     const matches = dataTypes.filter(dt => {
       const dtLower = dt.toLowerCase()
