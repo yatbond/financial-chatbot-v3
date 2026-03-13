@@ -818,6 +818,7 @@ interface FuzzyResult {
     year: string
     matchedKeywords: string[]
   }>
+  queryContext?: QueryContext
 }
 
 // Parse date from question - maps "january 2025" or "2025 jan" or "jan" or "feb 25" or "1st month" or "last month" to month/year
@@ -3651,8 +3652,6 @@ function handleAnalyzeQuery(data: FinancialRow[], project: string, debugMode: bo
 
 // Handle "detail" command after a regular query
 // Shows child items of the last matched item
-// Handle "detail" command after a regular query
-// Shows child items of the last matched item
 // Supports "detail" (show children) and "detail N" (drill into specific child)
 function handleQueryDetail(data: FinancialRow[], project: string, context: QueryContext, question: string, debugMode: boolean = false): FuzzyResult | null {
   if (!context.itemCode) return null
@@ -4565,13 +4564,35 @@ function answerQuestion(data: FinancialRow[], project: string, question: string,
     })
   }
 
-  return { text: response, candidates }
+  // Save query context for "detail" command
+  // Use the best match (first candidate) to provide drill-down context
+  const queryContext: QueryContext = {
+    itemCode: candidates[0]?.itemCode || targetItemCode || null,
+    itemName: candidates[0]?.dataType || targetDataType || null,
+    finType: targetFinType || null,
+    sheet: appliedSheet || null,
+    month: parsedDate.month || null,
+    year: parsedDate.year || null
+  }
+
+  // Store in memory cache (for same-instance requests)
+  if (queryContext.itemCode) {
+    queryContextCache.set(project, queryContext)
+  }
+
+  return { text: response, candidates, queryContext }
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { action, year, month, project, projectFile, question } = body
+    const { action, year, month, project, projectFile, question, queryContext: clientContext } = body
+
+    // If client sends a queryContext, restore it to the cache (for Vercel serverless)
+    // This allows "detail" commands to work across requests
+    if (clientContext && project && clientContext.itemCode) {
+      queryContextCache.set(project, clientContext)
+    }
 
     switch (action) {
       case 'getStructure': {
@@ -4621,7 +4642,11 @@ export async function POST(request: NextRequest) {
       case 'query': {
         const data = await loadProjectData(projectFile, year, month)
         const result = answerQuestion(data, project, question, month)
-        return NextResponse.json({ response: result.text, candidates: result.candidates })
+        return NextResponse.json({ 
+          response: result.text, 
+          candidates: result.candidates,
+          queryContext: result.queryContext 
+        })
       }
 
       case 'metrics': {

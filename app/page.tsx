@@ -298,6 +298,7 @@ export default function Home() {
   const handleProjectSelect = (val: string) => {
     setSelectedProject(val)
     setSearchQuery('')
+    setQueryContext(null)  // Reset context when changing project
     const found = availableProjects.find(p => `${p.code} - ${p.name}` === val)
     if (found) loadProjectData(found.filename, val)
   }
